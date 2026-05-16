@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Local model weights (too large to commit)
+models/
+*.safetensors
+*.gguf
+*.bin
+
+# Image corpus (not distributed)
+images/
+
+# Benchmark scratch
+benchmark_runs/
+experiment_logs/
+logs/
+probes/
+*.log
+
+# Editor cruft
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# OS
+Thumbs.db

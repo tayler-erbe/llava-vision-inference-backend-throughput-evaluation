@@ -1,0 +1,19 @@
+# Core dependencies for the benchmarks and pipeline.
+# Versions tested on the reference environment (Python 3.9–3.11, CUDA 12.4).
+
+# Data + analysis
+pandas>=2.0,<3.0
+pyarrow>=14.0,<19.0
+matplotlib>=3.7,<4.0
+numpy>=1.24,<2.1
+
+# HTTP clients
+requests>=2.28,<3.0
+urllib3>=1.26,<3.0
+
+# Image handling
+Pillow>=10.0,<12.0
+
+# System instrumentation
+psutil>=5.9,<7.0
+nvidia-ml-py>=12.0,<13.0       # GPU stats via NVML; falls back to nvidia-smi parsing
