@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#142b36">
+<meta name="description" content="Why a vision-language model used a third of an NVIDIA L4, and what moving from Ollama to vLLM did to throughput on the same GPU. A performance engineering brief by Tayler Erbe, Document Intelligence Lab.">
+<title>The GPU Was Idle · Document Intelligence Lab · Tayler Erbe</title>
+<meta property="og:type" content="website"><meta property="og:title" content="The GPU was idle. The server was the bottleneck."><meta property="og:description" content="Ollama against vLLM for a LLaVA image classifier on one NVIDIA L4: what the telemetry showed, and what changed. By Tayler Erbe."><meta property="og:url" content="https://tayler-erbe.github.io/llava-vision-inference-backend-throughput-evaluation/brief/">
+<link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="styles.css"><link rel="stylesheet" href="site.css"><link rel="stylesheet" href="study.css"></head>
+<body>
+<a href="#main" class="skip">Skip to content</a>
+<header class="site-header">
+<a href="https://tayler-erbe.github.io/document-intelligence-lab/" class="brand" aria-label="Document Intelligence Lab home"><span class="brand-mark">DI<span>↗</span></span><span>Document<br><strong>Intelligence Lab</strong></span></a>
+<nav aria-label="Main navigation"><a href="#question">Question</a><a href="#results">Results</a><a href="#why">Why</a><a href="#method">Method</a><a href="#limits">Limits</a></nav>
+<a class="repo-link" href="https://github.com/tayler-erbe/llava-vision-inference-backend-throughput-evaluation">Code and data <span aria-hidden="true">↗</span></a>
+</header>
+<main id="main">
+
+<section class="hero">
+<div class="hero-copy">
+<p class="eyebrow">TAYLER ERBE / PERFORMANCE ENGINEERING · VISION MODEL SERVING</p>
+<h1>The GPU was idle. <em>The server was the bottleneck.</em></h1>
+<p class="hero-deck">An archival image classifier was on track to take most of a day for one collection, and the GPU looked busy. The telemetry said otherwise: the card was running at about a third of its capacity, and sending more requests did not help. The limit was in how the model was served, not in the hardware.</p>
+<p class="answer-line"><b>Short version:</b> with the same base model on the same NVIDIA L4, vLLM delivered 3.6 times the throughput of Ollama at eight requests at once. Against the production setup, which also used a heavier model, the gain was 6.2 times.</p>
+<div class="hero-actions">
+<a href="#results" class="button primary">See the results <span aria-hidden="true">↓</span></a>
+<a href="#why" class="text-link">How the bottleneck was found ↓</a>
+<a href="https://taylererbe.com/archival-image-throughput-evaluation.html" class="text-link">Full case study ↗</a>
+</div>
+<p class="author-line"><span><b>Tayler Erbe</b> · Data and AI engineer · model evaluation and inference performance. <a href="#about">About</a></span></p>
+</div>
+<div class="hero-figure">
+<div class="figure-top"><span>AT EIGHT REQUESTS AT ONCE</span></div>
+<div class="hero-panel">
+<h2>Same card.<br>Different server.</h2>
+<ul>
+<li><span>Ollama, production model</span><b>8.9 images/min</b></li>
+<li><span>Ollama, same model as vLLM</span><b>15.3 images/min</b></li>
+<li><span>vLLM</span><b>55.4 images/min</b></li>
+<li><span>GPU use, Ollama → vLLM</span><b>31% → 97%</b></li>
+</ul>
+<p>No new hardware. The change was the serving software, which lets the GPU work on several images in one pass.</p>
+<a class="figure-source" href="#results">The comparison <span>↓</span></a>
+</div>
+</div>
+</section>
+
+<section class="stat-strip" aria-label="Key facts">
+<div><strong>3.6×</strong><span>throughput from the serving stack alone, same base model</span></div>
+<div><strong>97%</strong><span>GPU use on vLLM, against 26 to 54% on Ollama</span></div>
+<div><strong>1,200</strong><span>calls to settle the prompt before the serving test began</span></div>
+<div><strong>2 Hz</strong><span>GPU, memory and power telemetry during every run</span></div>
+</section>
+
+<section class="section wrap" id="question">
+<div class="section-head">
+<p class="eyebrow">00 / THE QUESTION</p>
+<h2>Is the limit<br>the card or the code?</h2>
+<p>The pipeline asks a vision-language model (LLaVA, 7B parameters) to describe each archival image and flag sensitive content, returning six fields as JSON. The target collection held 12,125 images.</p>
+</div>
+<div class="results-band">
+<article><p class="route-id">THE SYMPTOM</p><h3>Slow and flat</h3><p>Sending two, four or eight images at once took no less time per batch than sending one. Throughput did not move.</p></article>
+<article><p class="route-id">THE TEMPTATION</p><h3>Buy a bigger GPU</h3><p>A slow model on a small card usually reads as a hardware problem. Measured one request at a time, vLLM looked only modestly faster than production.</p></article>
+<article><p class="route-id">THE TEST</p><h3>Measure at real load</h3><p>Run the same images, prompt and card through two serving stacks at one, two, four and eight requests at once, with telemetry throughout.</p></article>
+</div>
+</section>
+
+<section class="section wrap" id="results">
+<div class="section-head">
+<p class="eyebrow">01 / RESULTS</p>
+<h2>Two flat lines,<br>one rising.</h2>
+<p>Thirty images, the same locked prompt and the same NVIDIA L4 for every configuration. Throughput at eight requests at once:</p>
+</div>
+<div class="bars" role="figure" aria-label="Throughput at concurrency 8">
+<h3>Images per minute, eight requests at once</h3>
+<p class="bars-note">Ollama 0.3.14 at 4-bit (Q4_0); vLLM 0.6.6 at 16-bit (FP16).</p>
+<div class="bar"><span class="bar-name">Ollama · llava-llama3<small>production baseline</small></span><span class="bar-track"><span class="bar-fill warn" style="width:16.1%"></span></span><span class="bar-val">8.9</span></div>
+<div class="bar"><span class="bar-name">Ollama · llava-1.5-7b<small>same base model as vLLM</small></span><span class="bar-track"><span class="bar-fill" style="width:27.6%"></span></span><span class="bar-val">15.3</span></div>
+<div class="bar"><span class="bar-name">vLLM · llava-1.5-7b<small>continuous batching</small></span><span class="bar-track"><span class="bar-fill win" style="width:100%"></span></span><span class="bar-val">55.4</span></div>
+</div>
+<div class="table-wrap">
+<table class="data-table">
+<caption class="sr-only">Throughput in images per minute by concurrency</caption>
+<thead><tr><th>Configuration</th><th class="n">1 at a time</th><th class="n">2</th><th class="n">4</th><th class="n">8</th></tr></thead>
+<tbody>
+<tr><td>Ollama · llava-llama3 (Q4_0)</td><td class="n">9.1</td><td class="n">8.7</td><td class="n">8.5</td><td class="n">8.9</td></tr>
+<tr><td>Ollama · llava-1.5-7b (Q4_0)</td><td class="n">14.9</td><td class="n">15.2</td><td class="n">15.4</td><td class="n">15.3</td></tr>
+<tr class="hl"><td>vLLM · llava-1.5-7b (FP16)</td><td class="n">13.0</td><td class="n">22.4</td><td class="n">37.4</td><td class="n">55.4</td></tr>
+</tbody></table>
+</div>
+<div class="finding-grid">
+<article><span>FINDING 01</span><h3>3.6× from serving alone</h3><p>With the same base model on both servers, vLLM did 55.4 images a minute against Ollama's 15.3. That is the part of the gain that comes from the serving stack.</p></article>
+<article><span>FINDING 02</span><h3>6.2× against production</h3><p>Against the production setup (8.9 images a minute), the gain also includes a lighter model. At that rate the 12,125-image collection drops from about 22 hours to under 4.</p></article>
+<article><span>FINDING 03</span><h3>One at a time hid it</h3><p>At a single request, vLLM was no faster than Ollama on the same model (13.0 against 14.9 a minute). The difference appears only under concurrent load.</p></article>
+</div>
+</section>
+
+<section class="use-section" id="why">
+<div class="wrap">
+<div class="use-layout">
+<h2>How the bottleneck was found.</h2>
+<div><p class="large-copy">Throughput alone said "slow". The telemetry said why: on Ollama, requests waited in a queue while the GPU stayed underused.</p></div>
+</div>
+<div class="table-wrap">
+<table class="data-table">
+<caption class="sr-only">Signals observed on Ollama and what they indicate</caption>
+<thead><tr><th>Signal on Ollama</th><th>What was measured</th><th>What it means</th></tr></thead>
+<tbody>
+<tr><td>Throughput</td><td>Flat from one to eight requests</td><td>No requests processed in parallel</td></tr>
+<tr><td>Response time</td><td>8.2× longer at eight requests than at one (vLLM: 1.9×)</td><td>Requests queued one behind another</td></tr>
+<tr><td>GPU use</td><td>26 to 31% and 54%, whatever the load</td><td>The card had spare capacity</td></tr>
+<tr><td>Power draw</td><td>About 49 W and 60 W of a 72 W cap</td><td>Not at its power limit</td></tr>
+<tr><td>GPU memory</td><td>Constant at 6,139 MB and 5,191 MB</td><td>No extra memory per request in flight</td></tr>
+</tbody></table>
+</div>
+<div class="next-footer"><p><strong>The same signature on two models.</strong> Both Ollama configurations behaved the same way, which points to how Ollama 0.3.14 schedules requests for this workload, not to either model. vLLM held the GPU at 96 to 97% at every load level.</p></div>
+</div>
+</section>
+
+<section class="section wrap" id="method">
+<div class="section-head">
+<p class="eyebrow">02 / METHOD</p>
+<h2>Three experiments,<br>one instrument.</h2>
+<p>The prompt was settled first, so that the serving comparison changed only one thing at a time.</p>
+</div>
+<ol class="pipeline">
+<li><span>01 / PROMPT</span><h3>Lock the prompt</h3><p>1,200 calls compared three separate questions per image against one combined question. The combined prompt was 1.61× faster, kept valid output, and made fewer confident mistakes on images with text.</p></li>
+<li><span>02 / OLLAMA</span><h3>Two models, four loads</h3><p>30 images at one, two, four and eight requests at once, on the production model and on the same base model vLLM would serve.</p></li>
+<li><span>03 / vLLM</span><h3>Same images, same card</h3><p>The identical sweep on vLLM 0.6.6 with continuous batching, which combines in-flight requests into shared passes on the GPU.</p></li>
+<li><span>04 / MEASURE</span><h3>Telemetry throughout</h3><p>Every call's timings and token counts, plus GPU use, memory, power, temperature and CPU every half second, saved so each chart can be rebuilt.</p></li>
+</ol>
+</section>
+
+<section class="section wrap" id="limits" style="padding-top:0">
+<div class="section-head">
+<p class="eyebrow">03 / LIMITS</p>
+<h2>What this does<br>not show.</h2>
+<p>This is a speed study. It chooses a serving stack; it does not measure classification accuracy.</p>
+</div>
+<ul class="limit-list">
+<li>The two servers ran the model at different precision: 4-bit on Ollama, 16-bit on vLLM. The 3.6× figure compares the same base model, not identical weights.</li>
+<li>Whether the two setups give the same answers on each image was not measured here. Accuracy needs labelled images and its own evaluation.</li>
+<li>The serving comparison used 30 images at four load levels. The corpus times are projections from that rate, not timed full runs.</li>
+<li>The Ollama result is for version 0.3.14 on this workload. Later versions may schedule requests differently.</li>
+</ul>
+</section>
+
+<section class="resources wrap" id="resources">
+<div>
+<p class="eyebrow">04 / RELATED WORK</p>
+<h2>The detail<br>behind this page.</h2>
+<p class="hero-deck">The benchmark code, timing data and charts are public, so every number here can be recomputed.</p>
+</div>
+<div class="resource-links">
+<a href="https://github.com/tayler-erbe/llava-vision-inference-backend-throughput-evaluation"><span>Code, data and 17-page report · GitHub</span><b>↗</b></a>
+<a href="https://taylererbe.com/archival-image-throughput-evaluation.html"><span>Archival image throughput · full case study</span><b>↗</b></a>
+<a href="https://taylererbe.com/archival-image-intelligence.html"><span>Archival image intelligence · the pipeline</span><b>↗</b></a>
+<a href="https://tayler-erbe.github.io/vllm-inference-throughput-evaluation/brief/"><span>Choosing an LLM for legislation extraction · Lab brief</span><b>↗</b></a>
+<a href="https://tayler-erbe.github.io/document-intelligence-lab/"><span>All Document Intelligence Lab studies</span><b>↗</b></a>
+</div>
+</section>
+
+<section class="section wrap" id="about" style="padding-top:20px">
+<div class="use-layout">
+<div><p class="eyebrow">ABOUT THIS WORK</p><h2 style="font-size:clamp(30px,3vw,42px)">Tayler Erbe</h2></div>
+<div>
+<p class="large-copy" style="font-size:20px">I'm a data and AI engineer. Before recommending new hardware, I measure where the time actually goes, at the load the system will really run at.</p>
+<p>More studies are in the <a href="https://tayler-erbe.github.io/document-intelligence-lab/">Document Intelligence Lab</a>; my background is on <a href="https://taylererbe.com/">taylererbe.com</a>.</p>
+</div>
+</div>
+</section>
+</main>
+<footer class="wrap">
+<div><strong>Document Intelligence Lab</strong><p>Tayler Erbe · Last updated 10 November 2026 · Measured on one NVIDIA L4.</p></div>
+<a href="https://tayler-erbe.github.io/document-intelligence-lab/">All Lab studies ↗</a>
+</footer>
+</body></html>
