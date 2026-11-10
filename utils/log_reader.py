@@ -4,7 +4,7 @@
 # Supports two discovery modes:
 #   1. Standard: glob */logs/*.parquet under PIPELINES_DIR
 #   2. Extra:    explicit list of paths (for pipelines in other locations,
-#                e.g. datashare/pipeline-workspace/...)
+#                e.g. a shared workspace directory)
 
 from pathlib import Path
 from datetime import datetime, timezone

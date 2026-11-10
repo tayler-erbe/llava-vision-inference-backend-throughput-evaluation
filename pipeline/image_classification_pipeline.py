@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-#datashare/pipeline-workspace/pipelines/Image Classification/image_classification_pipeline.py
 """
 Image Classification Pipeline
 ==============================
-Location : datashare/pipeline-workspace/pipelines/Image Classification/
 Script   : image_classification_pipeline.py
 
 Writes a structured pipeline_log.parquet to the logs/ subfolder so the

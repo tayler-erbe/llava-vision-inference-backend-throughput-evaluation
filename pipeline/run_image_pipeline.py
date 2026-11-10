@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#datashare/pipeline-workspace/pipelines/Image Classification/run_image_pipeline.py
 """
 run_image_pipeline.py
 =====================
@@ -24,9 +23,9 @@ Usage
 
   # Normal nightly run — explicit paths
   python run_image_pipeline.py \
-    --image-dir /datashare/image_data/All_Scanned_Images/Scanned_Images_Combined \
-    --output-dir "/datashare/pipeline-workspace/pipelines/Image Classification/output" \
-    --pipeline-script "/datashare/pipeline-workspace/pipelines/Image Classification/image_classification_pipeline.py"
+    --image-dir /path/to/images \
+    --output-dir /path/to/output \
+    --pipeline-script /path/to/image_classification_pipeline.py
 
 Cron example (starts every night at 7 PM):
   0 19 * * * /path/to/python /path/to/run_image_pipeline.py >> /path/to/logs/runner.log 2>&1
@@ -74,7 +73,7 @@ MAX_RUN_SECONDS = MAX_RUN_HOURS * 3600
 
 # Email settings — matches job_execution_monitor pattern
 FROM_EMAIL = "job_execution_monitoring_app@example.local"
-TO_EMAIL   = "terbe@illinois.edu"
+TO_EMAIL   = os.environ.get("PIPELINE_NOTIFY_EMAIL", "you@example.com")
 
 # State file tracks progress across nightly sessions
 PROGRESS_FILE = LOG_DIR / "runner_progress.json"
